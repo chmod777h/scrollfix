@@ -182,6 +182,22 @@ int main() {
               "ScrollFix is running in the background and will start at login.\n\n"
               "This setup guide will now delete itself."),
             S("好", "OK"), nullptr);
+        // 系统“自然滚动”关着时只能靠翻转触控板实现，Safari 等 App 里会出现滚动冲突
+        Boolean exists = false;
+        Boolean natural = CFPreferencesGetAppBooleanValue(
+            CFSTR("com.apple.swipescrolldirection"), kCFPreferencesAnyApplication, &exists);
+        if (exists && !natural &&
+            ask(S("建议打开“自然滚动”", "Turn on “Natural scrolling”"),
+                S("你的系统“自然滚动”目前是关闭的。这样用的话，触控板在 Safari 等 App 里滚动"
+                  "可能会冲突。\n\n请在“系统设置 → 触控板 → 滚动与缩放”里打开“自然滚动”，"
+                  "ScrollFix 会在几秒内自动适应，鼠标仍然是传统滚动。",
+                  "“Natural scrolling” is currently off. In that mode trackpad scrolling can "
+                  "misbehave in Safari and some other apps.\n\nTurn it on under System Settings → "
+                  "Trackpad → Scroll & Zoom. ScrollFix adapts within a few seconds and the mouse "
+                  "keeps classic scrolling."),
+                S("打开触控板设置", "Open Trackpad Settings"), S("以后再说", "Later"))) {
+            system("open 'x-apple.systempreferences:com.apple.Trackpad-Settings.extension'");
+        }
     } else {
         ask(S("尚未授权", "Permission not granted yet"),
             S("ScrollFix 已安装，但要等你在“辅助功能”里打开 scrollfix 的开关后才会生效。"

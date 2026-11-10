@@ -38,12 +38,35 @@ static CGEventRef onEvent(CGEventTapProxy, CGEventType type, CGEventRef e, void 
     return e;
 }
 
+// 读取系统“自然滚动”开关，决定反转哪一类设备。开关没设置过时系统默认是开。
+static void refreshDirection() {
+    CFPreferencesSynchronize(kCFPreferencesAnyApplication, kCFPreferencesCurrentUser,
+                             kCFPreferencesAnyHost);
+    CFPropertyListRef v = CFPreferencesCopyValue(CFSTR("com.apple.swipescrolldirection"),
+                                                 kCFPreferencesAnyApplication,
+                                                 kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    bool natural = true;
+    if (v) {
+        if (CFGetTypeID(v) == CFBooleanGetTypeID()) {
+            natural = CFBooleanGetValue((CFBooleanRef)v);
+        } else if (CFGetTypeID(v) == CFNumberGetTypeID()) {
+            int n = 1;
+            CFNumberGetValue((CFNumberRef)v, kCFNumberIntType, &n);
+            natural = n != 0;
+        }
+        CFRelease(v);
+    }
+    gInvertWheel = natural;
+}
+
+static void onTimer(CFRunLoopTimerRef, void *) { refreshDirection(); }
+static void onPrefChanged(CFNotificationCenterRef, void *, CFNotificationName, const void *,
+                          CFDictionaryRef) {
+    refreshDirection();
+}
+
 int main() {
-    // 读取系统“自然滚动”开关，决定反转哪一类设备
-    Boolean exists = false;
-    Boolean natural = CFPreferencesGetAppBooleanValue(CFSTR("com.apple.swipescrolldirection"),
-                                                      kCFPreferencesAnyApplication, &exists);
-    gInvertWheel = exists ? natural : true;
+    refreshDirection();
 
     // 首次运行时弹出“辅助功能”授权提示
     const void *keys[] = {kAXTrustedCheckOptionPrompt};
@@ -64,6 +87,15 @@ int main() {
     CFRunLoopSourceRef src = CFMachPortCreateRunLoopSource(nullptr, gTap, 0);
     CFRunLoopAddSource(CFRunLoopGetCurrent(), src, kCFRunLoopCommonModes);
     CGEventTapEnable(gTap, true);
+
+    // 用户在系统设置里切换“自然滚动”后自动跟随：系统设置会发通知，另外每 2 秒兜底检查一次
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDistributedCenter(), nullptr,
+                                    onPrefChanged,
+                                    CFSTR("SwipeScrollDirectionDidChangeNotification"), nullptr,
+                                    CFNotificationSuspensionBehaviorDeliverImmediately);
+    CFRunLoopTimerRef timer = CFRunLoopTimerCreate(nullptr, CFAbsoluteTimeGetCurrent() + 2.0, 2.0,
+                                                   0, 0, onTimer, nullptr);
+    CFRunLoopAddTimer(CFRunLoopGetCurrent(), timer, kCFRunLoopCommonModes);
 
     // 告诉安装向导“已经生效”(只存在于内存里的系统通知状态，不写任何文件)
     int token = 0;
